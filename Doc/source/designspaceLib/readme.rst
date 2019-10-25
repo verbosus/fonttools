@@ -53,9 +53,6 @@ Axes
    location uses an axis that is not defined it will be ignored.
 -  If there are no ``axes`` in the document, locations will accept all
    axis names, so that we can..
--  Use ``doc.checkAxes()`` to reconstruct axes definitions based on the
-   ``source.location`` values. If you save the document the axes will be
-   there.
 
 Default font
 ============
@@ -68,7 +65,6 @@ Default font
 -  If no source has a ``copyInfo`` flag, mutatorMath will be used to
    select one. This source gets its ``copyInfo`` flag set. If you save
    the document this flag will be set.
--  Use ``doc.checkDefault()`` to set the default font.
 
 ************
 Localisation
