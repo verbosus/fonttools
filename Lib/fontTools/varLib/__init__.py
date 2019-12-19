@@ -220,15 +220,11 @@ def _add_gvar(font, masterModel, master_ttfs, tolerance=0.5, optimize=True):
 	log.info("Generating gvar")
 	assert "gvar" not in font
 
-	glyf = font['glyf']
-
 	# use hhea.ascent of base master as default vertical origin when vmtx is missing
 	baseAscent = font['hhea'].ascent
 
 	variations = {}
 	for glyph in font.getGlyphOrder():
-
-		isComposite = glyf[glyph].isComposite()
 
 		allData = [
 			m["glyf"].getCoordinatesAndControls(glyph, m, defaultVerticalOrigin=baseAscent)
@@ -254,7 +250,7 @@ def _add_gvar(font, masterModel, master_ttfs, tolerance=0.5, optimize=True):
 		endPts = control.endPts
 
 		for i,(delta,support) in enumerate(zip(deltas[1:], supports[1:])):
-			if all(abs(v) <= tolerance for v in delta.array) and not isComposite:
+			if all(abs(v) <= tolerance for v in delta.array):
 				continue
 			var = TupleVariation(support, delta)
 			if optimize:
