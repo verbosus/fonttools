@@ -1,3 +1,63 @@
+4.4.0 (released 2020-02-18)
+---------------------------
+
+- [colorLib] Added ``fontTools.colorLib.builder`` module, initially with ``buildCOLR``
+  and ``buildCPAL`` public functions. More color font formats will follow (#1827).
+- [fontBuilder] Added ``setupCOLR`` and ``setupCPAL`` methods (#1826).
+- [ttGlyphPen] Quantize ``GlyphComponent.transform`` floats to ``F2Dot14`` to fix
+  round-trip issue when computing bounding boxes of transformed components (#1830).
+- [glyf] If a component uses reference points (``firstPt`` and ``secondPt``) for
+  alignment (instead of X and Y offsets), compute the effective translation offset
+  *after* having applied any transform (#1831).
+- [glyf] When all glyphs have zero contours, compile ``glyf`` table data as a single
+  null byte in order to pass validation by OTS and Windows (#1829).
+- [feaLib] Parsing feature code now ensures that referenced glyph names are part of
+  the known glyph set, unless a glyph set was not provided.
+- [varLib] When filling in the default axis value for a missing location of a source or
+  instance, correctly map the value forward.
+- [varLib] The avar table can now contain mapping output values that are greater than
+  OR EQUAL to the preceeding value, as the avar specification allows this.
+- [varLib] The errors of the module are now ordered hierarchically below VarLibError. 
+  See #1821.
+
+4.3.0 (released 2020-02-03)
+---------------------------
+
+- [EBLC/CBLC] Fixed incorrect padding length calculation for Format 3 IndexSubTable
+  (#1817, #1818).
+- [varLib] Fixed error when merging OTL tables and TTFonts were loaded as ``lazy=True``
+  (#1808, #1809).
+- [varLib] Allow to use master fonts containing ``CFF2`` table when building VF (#1816).
+- [ttLib] Make ``recalcBBoxes`` option work also with ``CFF2`` table (#1816).
+- [feaLib] Don't reset ``lookupflag`` in lookups defined inside feature blocks.
+  They will now inherit the current ``lookupflag`` of the feature. This is what
+  Adobe ``makeotf`` also does in this case (#1815).
+- [feaLib] Fixed bug with mixed single/multiple substitutions. If a single substitution
+  involved a glyph class, we were incorrectly using only the first glyph in the class
+  (#1814).
+
+4.2.5 (released 2020-01-29)
+---------------------------
+
+- [feaLib] Do not fail on duplicate multiple substitutions, only warn (#1811).
+- [subset] Optimize SinglePos subtables to Format 1 if all ValueRecords are the same
+  (#1802).
+
+4.2.4 (released 2020-01-09)
+---------------------------
+
+- [unicodedata] Update RTL_SCRIPTS for Unicode 11 and 12.
+
+4.2.3 (released 2020-01-07)
+---------------------------
+
+- [otTables] Fixed bug when splitting `MarkBasePos` subtables as offsets overflow.
+  The mark class values in the split subtable were not being updated, leading to
+  invalid mark-base attachments (#1797, googlefonts/noto-source#145).
+- [feaLib] Only log a warning instead of error when features contain duplicate
+  substitutions (#1767).
+- [glifLib] Strip XML comments when parsing with lxml (#1784, #1785).
+
 4.2.2 (released 2019-12-12)
 ---------------------------
 

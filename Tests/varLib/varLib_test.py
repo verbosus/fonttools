@@ -1,6 +1,7 @@
 from fontTools.misc.py23 import *
 from fontTools.ttLib import TTFont, newTable
-from fontTools.varLib import build
+from fontTools.varLib import build, load_designspace
+from fontTools.varLib.errors import VarLibValidationError
 from fontTools.varLib.mutator import instantiateVariableFont
 from fontTools.varLib import main as varLib_main, load_masters
 from fontTools.varLib import set_default_weight_width_slant
@@ -314,6 +315,28 @@ class BuildTest(unittest.TestCase):
         tables = ["fvar", "CFF2"]
         self.expect_ttx(varfont, expected_ttx_path, tables)
 
+    def test_varlib_build_CFF2_from_CFF2(self):
+        ds_path = self.get_test_input('TestCFF2Input.designspace')
+        ttx_dir = self.get_test_input("master_cff2_input")
+        expected_ttx_path = self.get_test_output("BuildTestCFF2.ttx")
+
+        self.temp_dir()
+        for path in self.get_file_list(ttx_dir, '.ttx', 'TestCFF2_'):
+            self.compile_font(path, ".otf", self.tempdir)
+
+        ds = DesignSpaceDocument.fromfile(ds_path)
+        for source in ds.sources:
+            source.path = os.path.join(
+                self.tempdir, os.path.basename(source.filename).replace(".ufo", ".otf")
+            )
+        ds.updatePaths()
+
+        varfont, _, _ = build(ds)
+        varfont = reload_font(varfont)
+
+        tables = ["fvar", "CFF2"]
+        self.expect_ttx(varfont, expected_ttx_path, tables)
+
     def test_varlib_build_sparse_CFF2(self):
         ds_path = self.get_test_input('TestSparseCFF2VF.designspace')
         ttx_dir = self.get_test_input("master_sparse_cff2")
@@ -471,6 +494,27 @@ class BuildTest(unittest.TestCase):
         expected_ttx_path = self.get_test_output("SparseMasters.ttx")
 
         varfont, _, _ = build(ds_path)
+        varfont = reload_font(varfont)
+        tables = [table_tag for table_tag in varfont.keys() if table_tag != "head"]
+        self.expect_ttx(varfont, expected_ttx_path, tables)
+
+    def test_varlib_build_lazy_masters(self):
+        # See https://github.com/fonttools/fonttools/issues/1808
+        ds_path = self.get_test_input("SparseMasters.designspace")
+        expected_ttx_path = self.get_test_output("SparseMasters.ttx")
+
+        def _open_font(master_path, master_finder=lambda s: s):
+            font = TTFont()
+            font.importXML(master_path)
+            buf = BytesIO()
+            font.save(buf, reorderTables=False)
+            buf.seek(0)
+            font = TTFont(buf, lazy=True)  # reopen in lazy mode, to reproduce #1808
+            return font
+
+        ds = DesignSpaceDocument.fromfile(ds_path)
+        ds.loadSourceFonts(_open_font)
+        varfont, _, _ = build(ds)
         varfont = reload_font(varfont)
         tables = [table_tag for table_tag in varfont.keys() if table_tag != "head"]
         self.expect_ttx(varfont, expected_ttx_path, tables)
@@ -682,6 +726,13 @@ class BuildTest(unittest.TestCase):
             ("B", "D"): 40,
         }
 
+    def test_designspace_fill_in_location(self):
+        ds_path = self.get_test_input("VarLibLocationTest.designspace")
+        ds = DesignSpaceDocument.fromfile(ds_path)
+        ds_loaded = load_designspace(ds)
+
+        assert ds_loaded.instances[0].location == {"weight": 0, "width": 50}
+
 
 def test_load_masters_layerName_without_required_font():
     ds = DesignSpaceDocument()
@@ -691,7 +742,7 @@ def test_load_masters_layerName_without_required_font():
     ds.addSource(s)
 
     with pytest.raises(
-        AttributeError,
+        VarLibValidationError,
         match="specified a layer name but lacks the required TTFont object",
     ):
         load_masters(ds)

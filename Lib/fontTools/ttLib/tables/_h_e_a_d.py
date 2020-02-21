@@ -4,7 +4,7 @@ from fontTools.misc.fixedTools import floatToFixedToStr, strToFixedToFloat
 from fontTools.misc.textTools import safeEval, num2binary, binary2num
 from fontTools.misc.timeTools import timestampFromString, timestampToString, timestampNow
 from fontTools.misc.timeTools import epoch_diff as mac_epoch_diff # For backward compat
-from fontTools.misc.arrayTools import intRect
+from fontTools.misc.arrayTools import intRect, unionRect
 from . import DefaultTable
 import logging
 
@@ -34,14 +34,14 @@ headFormat = """
 
 class table__h_e_a_d(DefaultTable.DefaultTable):
 
-	dependencies = ['maxp', 'loca', 'CFF ']
+	dependencies = ['maxp', 'loca', 'CFF ', 'CFF2']
 
 	def decompile(self, data, ttFont):
 		dummy, rest = sstruct.unpack2(headFormat, data, self)
 		if rest:
 			# this is quite illegal, but there seem to be fonts out there that do this
 			log.warning("extra bytes at the end of 'head' table")
-			assert rest == "\0\0"
+			assert rest == b"\0\0"
 
 		# For timestamp fields, ignore the top four bytes.  Some fonts have
 		# bogus values there.  Since till 2038 those bytes only can be zero,
@@ -65,6 +65,19 @@ class table__h_e_a_d(DefaultTable.DefaultTable):
 			if 'CFF ' in ttFont:
 				topDict = ttFont['CFF '].cff.topDictIndex[0]
 				self.xMin, self.yMin, self.xMax, self.yMax = intRect(topDict.FontBBox)
+			elif 'CFF2' in ttFont:
+				topDict = ttFont['CFF2'].cff.topDictIndex[0]
+				charStrings = topDict.CharStrings
+				fontBBox = None
+				for charString in charStrings.values():
+					bounds = charString.calcBounds(charStrings)
+					if bounds is not None:
+						if fontBBox is not None:
+							fontBBox = unionRect(fontBBox, bounds)
+						else:
+							fontBBox = bounds
+				if fontBBox is not None:
+					self.xMin, self.yMin, self.xMax, self.yMax = intRect(fontBBox)
 		if ttFont.recalcTimestamp:
 			self.modified = timestampNow()
 		data = sstruct.pack(headFormat, self)

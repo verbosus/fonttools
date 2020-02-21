@@ -602,7 +602,10 @@ class FontBuilder(object):
         varData = buildVarData(list(range(len(regions))), None, optimize=False)
         varStore = buildVarStore(varRegionList, [varData])
         vstore = VarStoreData(otVarStore=varStore)
-        self.font["CFF2"].cff.topDictIndex[0].VarStore = vstore
+        topDict = self.font["CFF2"].cff.topDictIndex[0]
+        topDict.VarStore = vstore
+        for fontDict in topDict.FDArray:
+            fontDict.Private.vstore = vstore
 
     def setupGlyf(self, glyphs, calcGlyphBounds=True):
         """Create the `glyf` table from a dict, that maps glyph names
@@ -763,6 +766,39 @@ class FontBuilder(object):
 
         featureVars.addFeatureVariations(
             self.font, conditionalSubstitutions, featureTag=featureTag
+        )
+
+    def setupCOLR(self, colorLayers):
+        """Build new COLR table using color layers dictionary.
+
+        Cf. `fontTools.colorLib.builder.buildCOLR`.
+        """
+        from fontTools.colorLib.builder import buildCOLR
+
+        self.font["COLR"] = buildCOLR(colorLayers)
+
+    def setupCPAL(
+        self,
+        palettes,
+        paletteTypes=None,
+        paletteLabels=None,
+        paletteEntryLabels=None,
+    ):
+        """Build new CPAL table using list of palettes.
+
+        Optionally build CPAL v1 table using paletteTypes, paletteLabels and
+        paletteEntryLabels.
+
+        Cf. `fontTools.colorLib.builder.buildCPAL`.
+        """
+        from fontTools.colorLib.builder import buildCPAL
+
+        self.font["CPAL"] = buildCPAL(
+            palettes,
+            paletteTypes=paletteTypes,
+            paletteLabels=paletteLabels,
+            paletteEntryLabels=paletteEntryLabels,
+            nameTable=self.font.get("name")
         )
 
 

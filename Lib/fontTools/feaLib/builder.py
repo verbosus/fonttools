@@ -679,15 +679,17 @@ class Builder(object):
         self.cur_lookup_name_ = name
         self.named_lookups_[name] = None
         self.cur_lookup_ = None
-        self.lookupflag_ = 0
-        self.lookupflag_markFilterSet_ = None
+        if self.cur_feature_name_ is None:
+            self.lookupflag_ = 0
+            self.lookupflag_markFilterSet_ = None
 
     def end_lookup_block(self):
         assert self.cur_lookup_name_ is not None
         self.cur_lookup_name_ = None
         self.cur_lookup_ = None
-        self.lookupflag_ = 0
-        self.lookupflag_markFilterSet_ = None
+        if self.cur_feature_name_ is None:
+            self.lookupflag_ = 0
+            self.lookupflag_markFilterSet_ = None
 
     def add_lookup_call(self, lookup_name):
         assert lookup_name in self.named_lookups_, lookup_name
@@ -892,9 +894,17 @@ class Builder(object):
             return
         lookup = self.get_lookup_(location, MultipleSubstBuilder)
         if glyph in lookup.mapping:
-            raise FeatureLibError(
-                'Already defined substitution for glyph "%s"' % glyph,
-                location)
+            if replacements == lookup.mapping[glyph]:
+                log.info(
+                    'Removing duplicate multiple substitution from glyph'
+                    ' "%s" to %s%s',
+                    glyph, replacements,
+                    ' at {}:{}:{}'.format(*location) if location else '',
+                )
+            else:
+                raise FeatureLibError(
+                    'Already defined substitution for glyph "%s"' % glyph,
+                    location)
         lookup.mapping[glyph] = replacements
 
     def add_reverse_chain_single_subst(self, location, old_prefix,
