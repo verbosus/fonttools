@@ -1261,7 +1261,7 @@ class ParserTest(unittest.TestCase):
                          '"Optical Size";}; } STAT;')
         da = doc.statements[0].statements[0]
         self.assertIsInstance(da, ast.STATDesignAxis)
-        self.assertEqual(da.key, 'opsz')
+        self.assertEqual(da.tag, 'opsz')
         self.assertEqual(da.axisOrder, 0)
         self.assertEqual(da.names[0][3], 'Optical Size')
 
