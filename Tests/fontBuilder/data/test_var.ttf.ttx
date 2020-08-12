@@ -399,7 +399,7 @@
     <AxisValueArray>
       <AxisValue index="0" Format="1">
         <AxisIndex value="0"/>
-        <Flags value="2"/>
+        <Flags value="2"/>  <!-- ElidableAxisValueName -->
         <ValueNameID value="262"/>  <!-- Neutral -->
         <Value value="0.0"/>
       </AxisValue>
@@ -411,7 +411,7 @@
       </AxisValue>
       <AxisValue index="2" Format="1">
         <AxisIndex value="1"/>
-        <Flags value="2"/>
+        <Flags value="2"/>  <!-- ElidableAxisValueName -->
         <ValueNameID value="262"/>  <!-- Neutral -->
         <Value value="0.0"/>
       </AxisValue>
@@ -423,7 +423,7 @@
       </AxisValue>
       <AxisValue index="4" Format="1">
         <AxisIndex value="2"/>
-        <Flags value="2"/>
+        <Flags value="2"/>  <!-- ElidableAxisValueName -->
         <ValueNameID value="262"/>  <!-- Neutral -->
         <Value value="0.0"/>
       </AxisValue>
@@ -435,7 +435,7 @@
       </AxisValue>
       <AxisValue index="6" Format="1">
         <AxisIndex value="3"/>
-        <Flags value="2"/>
+        <Flags value="2"/>  <!-- ElidableAxisValueName -->
         <ValueNameID value="262"/>  <!-- Neutral -->
         <Value value="0.0"/>
       </AxisValue>

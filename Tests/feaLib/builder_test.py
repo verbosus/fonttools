@@ -72,7 +72,7 @@ class BuilderTest(unittest.TestCase):
         PairPosSubtable ChainSubstSubtable SubstSubtable ChainPosSubtable 
         LigatureSubtable AlternateSubtable MultipleSubstSubtable 
         SingleSubstSubtable aalt_chain_contextual_subst AlternateChained 
-        MultipleLookupsPerGlyph MultipleLookupsPerGlyph2
+        MultipleLookupsPerGlyph MultipleLookupsPerGlyph2 STAT_test
     """.split()
 
     def __init__(self, methodName):
@@ -117,7 +117,7 @@ class BuilderTest(unittest.TestCase):
     def expect_ttx(self, font, expected_ttx):
         path = self.temp_path(suffix=".ttx")
         font.saveXML(path, tables=['head', 'name', 'BASE', 'GDEF', 'GSUB',
-                                   'GPOS', 'OS/2', 'hhea', 'vhea'])
+                                   'GPOS', 'OS/2', 'STAT', 'hhea', 'vhea'])
         actual = self.read_ttx(path)
         expected = self.read_ttx(expected_ttx)
         if actual != expected:
@@ -452,6 +452,140 @@ class BuilderTest(unittest.TestCase):
             "    pos a' lookup dummy b;"
             "} test;"
         )
+
+    def test_STAT_design_axis_name(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            'Expected "name", got "badtag"',
+            self.build,
+            'table name {'
+            '   nameid 256 "Roman"; '
+            '} name;'
+            'table STAT {'
+            '    ElidedFallbackName { name "Roman"; };'
+            '    DesignAxis opsz 0 { badtag "Optical Size"; };'
+            '} STAT;')
+
+    def test_STAT_duplicate_design_axis_name(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            'DesignAxis already defined for tag "opsz".',
+            self.build,
+            'table name {'
+            '   nameid 256 "Roman"; '
+            '} name;'
+            'table STAT {'
+            '    ElidedFallbackName { name "Roman"; };'
+            '    DesignAxis opsz 0 { name "Optical Size"; };'
+            '    DesignAxis opsz 1 { name "Optical Size"; };'
+            '} STAT;')
+
+    def test_STAT_design_axis_multilingual_name(self):
+        print(self.build(
+        'table name {'
+        '   nameid 256 "Roman"; '
+        '} name;'
+        'table STAT {'
+        '    ElidedFallbackName { name "Roman"; };'
+        '    DesignAxis opsz 0 { '
+        '    name "Optical Size"; '
+        '    name 3 1 0x0408 "\03B1\03C0\03BB\03CC"; '
+        '};'
+        '} STAT;'))
+
+    def test_STAT_undefined_tag(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            'DesignAxis not defined for wdth.',
+            self.build,
+            'table name {'
+            '   nameid 256 "Roman"; '
+            '} name;'
+            'table STAT {'
+            '    ElidedFallbackName { name "Roman"; };'
+            '    DesignAxis opsz 0 { name "Optical Size"; };'
+            '    AxisValue { '
+            '        location wdth 125; '
+            '        name "Wide"; '
+            '    };'
+            '} STAT;')
+
+    def test_STAT_axis_value_format4(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            'Axis tag wdth already defined.',
+            self.build,
+            'table name {'
+            '   nameid 256 "Roman"; '
+            '} name;'
+            'table STAT {'
+            '    ElidedFallbackName { name "Roman"; };'
+            '    DesignAxis opsz 0 { name "Optical Size"; };'
+            '    DesignAxis wdth 1 { name "Width"; };'
+            '    DesignAxis wght 2 { name "Weight"; };'
+            '    AxisValue { '
+            '        location opsz 8; '
+            '        location wdth 125; '
+            '        location wdth 125; '
+            '        location wght 500; '
+            '        name "Caption Medium Wide"; '
+            '    };'
+            '} STAT;')
+
+    def test_STAT_duplicate_axis_value_record(self):
+        # Test for Duplicate AxisValueRecords even when the definition order
+        # is different.
+        self.assertRaisesRegex(
+            FeatureLibError,
+            'Duplicate AxisValueRecords are not allowed.',
+            self.build,
+            'table name {'
+            '   nameid 256 "Roman"; '
+            '} name;'
+            'table STAT {'
+            '    ElidedFallbackName { name "Roman"; };'
+            '    DesignAxis opsz 0 { name "Optical Size"; };'
+            '    DesignAxis wdth 1 { name "Width"; };'
+            '    AxisValue {'
+            '         location opsz 8 5 9;'
+            '         location wdth 400 350 450;'
+            '         name "Caption";'
+            '     };'
+            '    AxisValue {'
+            '         location wdth 400 350 450;'
+            '         location opsz 8 5 9;'
+            '         name "Caption";'
+            '     };'
+            '} STAT;')
+
+    def test_STAT_axis_value_missing_location(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            'Expected "Axis location"',
+            self.build,
+            'table name {'
+            '   nameid 256 "Roman"; '
+            '} name;'
+            'table STAT {'
+            '    ElidedFallbackName { name "Roman"; };'
+            '    DesignAxis opsz 0 { name "Optical Size"; };'
+            '    AxisValue { '
+            '        name "Wide"; '
+            '    };'
+            '} STAT;')
+
+    def test_STAT_invalid_location_tag(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            'Tags can not be longer than 4 characters',
+            self.build,
+            'table name {'
+            '   nameid 256 "Roman"; '
+            '} name;'
+            'table STAT {'
+            '    ElidedFallbackName { name "Roman"; };'
+            '    DesignAxis width 0 { name "Width"; };'
+            '} STAT;')
 
     def test_extensions(self):
         class ast_BaseClass(ast.MarkClass):

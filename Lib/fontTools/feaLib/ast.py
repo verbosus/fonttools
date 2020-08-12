@@ -34,6 +34,8 @@ __all__ = [
     "ChainContextSubstStatement",
     "CharacterStatement",
     "CursivePosStatement",
+    "ElidedFallbackName",
+    "ElidedFallbackNameID",
     "Expression",
     "FeatureNameStatement",
     "FeatureReferenceStatement",
@@ -62,6 +64,8 @@ __all__ = [
     "SingleSubstStatement",
     "SizeParameters",
     "Statement",
+    "STATAxisValueRecord",
+    "STATDesignAxis",
     "SubtableStatement",
     "TableBlock",
     "ValueRecord",
@@ -75,6 +79,15 @@ def deviceToString(device):
         return "<device NULL>"
     else:
         return "<device %s>" % ", ".join("%d %d" % t for t in device)
+
+
+def statNameToString(name_rec):
+    platformID, platEncID, langID, string = name_rec
+    if platformID == 3 and platEncID == 1 and langID == 0x0409:
+        return f'name "{string}";'
+    string = string.encode('unicode-escape').decode().replace('\\u', '\\').upper()
+    langID = '0x%04x' % langID
+    return f'name {platformID} {platEncID} {langID} "{string}";'
 
 
 fea_keywords = set(
@@ -1861,3 +1874,103 @@ class VheaField(Statement):
         fields = ("VertTypoAscender", "VertTypoDescender", "VertTypoLineGap")
         keywords = dict([(x.lower(), x) for x in fields])
         return "{} {};".format(keywords[self.key], self.value)
+
+
+class STATDesignAxis(Statement):
+    """STAT DesignAxis
+
+    Args:
+        tag: a 4 letter axis tag
+        order: an int to specify Axis ordering
+        names: a list of name record tuples, eg (3, 1, 1, "Bold")
+    """
+    def __init__(self, tag, order, names, location=None):
+        Statement.__init__(self, location)
+        self.tag = tag
+        self.axisOrder = order
+        self.names = names
+        self.location = location
+
+    def build(self, builder):
+        builder.addDesignAxis(self.location, self.tag, self.axisOrder, self.names)
+
+    def asFea(self, indent=""):
+        res = f'DesignAxis {self.tag} {self.axisOrder} {{ '
+        for name_rec in self.names:
+            res += statNameToString(name_rec)
+        res += f' }};'
+        return res
+
+
+class ElidedFallbackName(Statement):
+    """STAT ElidedFallbackName
+
+    Args:
+        names: a list of name record tuples. (3, 1, 1, "Bold")
+    """
+    def __init__(self, names, location=None):
+        Statement.__init__(self, location)
+        self.names = names
+
+    def build(self, builder):
+        builder.set_ElidedFallbackName(self.names)
+
+    def asFea(self, indent=""):
+        res = f'ElidedFallbackName {{ '
+        for name_rec in self.names:
+            res += statNameToString(name_rec)
+        res += f' }};'
+        return res
+
+
+class ElidedFallbackNameID(Statement):
+    """STAT ElidedFallbackNameID
+
+    Args:
+        value: a nameid value
+    """
+    def __init__(self, value, location=None):
+        Statement.__init__(self, location)
+        self.value = value
+
+    def build(self, builder):
+        builder.set_ElidedFallbackNameID(self.value)
+
+    def asFea(self, indent=""):
+        return f'ElidedFallbackNameID {self.value};'
+
+
+class STATAxisValueRecord(Statement):
+    """A STAT Axis Value Record
+
+    Args:
+        names: a list of name record tuples. (3, 1, 1, "Bold")
+        values: a list of location tuples. ("opsz", [8, 5, 10])
+        flags: a list of 'OlderSiblingFontAttribute' and/or 'ElidableAxisValueName'
+    """
+
+    def __init__(self, names, values, flags, location=None):
+        Statement.__init__(self, location)
+        self.names = names
+        self.values = values
+        self.flags = flags
+        self.location = location
+
+    def build(self, builder):
+        builder.addAxisValueRecord(self.location, self.names, self.values, self.flags)
+
+    def asFea(self, indent=""):
+        res = f''
+        for location in self.values:
+            axis_tag, coords = location
+            res += f'location {axis_tag} ' \
+                   f'{" ".join(["%s" % i for i in coords])};\n'
+
+        for name_rec in self.names:
+            res += statNameToString(name_rec)
+            res += '\n'
+
+        if self.flags:
+            res += f'flag {" ".join(self.flags)};'
+        return res
+

@@ -1256,6 +1256,46 @@ class ParserTest(unittest.TestCase):
             '"dflt" is not a valid script tag; use "DFLT" instead',
             self.parse, "feature test {script dflt;} test;")
 
+    def test_stat_design_axis(self):  # STAT DesignAxis
+        doc = self.parse('table STAT { DesignAxis opsz 0 {name '
+                         '"Optical Size";}; } STAT;')
+        da = doc.statements[0].statements[0]
+        self.assertIsInstance(da, ast.STATDesignAxis)
+        self.assertEqual(da.key, 'opsz')
+        self.assertEqual(da.axisOrder, 0)
+        self.assertEqual(da.names[0][3], 'Optical Size')
+
+    def test_stat_axis_value_format1(self):  # STAT AxisValue
+        doc = self.parse('table STAT { DesignAxis opsz 0 '
+                         '{name "Optical Size";}; '
+                         'AxisValue {location opsz 8; name "Caption";}; } '
+                         'STAT;')
+        avr = doc.statements[0].statements[1].statements[0]
+        self.assertIsInstance(avr, ast.STATAxisValueRecord)
+        self.assertEqual(avr.values[0][0], 'opsz')
+        self.assertEqual(avr.values[0][1][0], 8)
+        self.assertEqual(avr.names[0][3], 'Caption')
+
+    def test_stat_axis_value_format2(self):  # STAT AxisValue
+        doc = self.parse('table STAT { DesignAxis opsz 0 '
+                         '{name "Optical Size";}; '
+                         'AxisValue {location opsz 8 6 10; name "Caption";}; } '
+                         'STAT;')
+        avr = doc.statements[0].statements[1].statements[0]
+        self.assertIsInstance(avr, ast.STATAxisValueRecord)
+        self.assertEqual(avr.values[0][0], 'opsz')
+        self.assertEqual(avr.values[0][1], [8, 6, 10])
+        self.assertEqual(avr.names[0][3], 'Caption')
+
+    def test_stat_axis_value_format2_bad_range(self):  # STAT AxisValue
+        self.assertRaisesRegex(
+            FeatureLibError,
+            'Default value 5 is outside of specified range 6-10.',
+            self.parse, 'table STAT { DesignAxis opsz 0 '
+                        '{name "Optical Size";}; '
+                        'AxisValue {location opsz 5 6 10; name "Caption";}; } '
+                        'STAT;')
+
     def test_sub_single_format_a(self):  # GSUB LookupType 1
         doc = self.parse("feature smcp {substitute a by a.sc;} smcp;")
         sub = doc.statements[0].statements[0]

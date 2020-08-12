@@ -8,6 +8,7 @@ from fontTools.otlLib import builder as otl
 from fontTools.otlLib.maxContextCalc import maxCtxFont
 from fontTools.ttLib import newTable, getTableModule
 from fontTools.ttLib.tables import otBase, otTables
+from fontTools.ttLib.tables._n_a_m_e import _WINDOWS_LANGUAGES
 from fontTools.otlLib.builder import (
     AlternateSubstBuilder,
     ChainContextPosBuilder,
@@ -85,6 +86,7 @@ class Builder(object):
             "hhea",
             "name",
             "vhea",
+            "STAT",
         ]
     )
 
@@ -145,6 +147,8 @@ class Builder(object):
         self.hhea_ = {}
         # for table 'vhea'
         self.vhea_ = {}
+        # for table 'STAT'
+        self.stat_ = {}
 
     def build(self, tables=None):
         if self.parseTree is None:
@@ -174,6 +178,8 @@ class Builder(object):
             self.build_name()
         if "OS/2" in tables:
             self.build_OS_2()
+        if "STAT" in tables:
+            self.build_STAT()
         for tag in ("GPOS", "GSUB"):
             if tag not in tables:
                 continue
@@ -493,6 +499,176 @@ class Builder(object):
             )
         if version >= 5:
             checkattr(table, ("usLowerOpticalPointSize", "usUpperOpticalPointSize"))
+
+    def set_ElidedFallbackName(self, names):
+        self.stat_["ElidedFallbackName"] = names
+
+    def set_ElidedFallbackNameID(self, value):
+        self.stat_["ElidedFallbackNameID"] = value
+
+    def addDesignAxis(self, location, key, axisOrder, value):
+        if "DesignAxes" not in self.stat_:
+            self.stat_["DesignAxes"] = {}
+        if key in self.stat_["DesignAxes"]:
+            raise FeatureLibError(
+                'DesignAxis already defined for tag "%s".' % key,
+                location,
+            )
+        self.stat_["DesignAxes"][key] = (axisOrder, value)
+
+    def addAxisValueRecord(self, location, names, locations, flags):
+        if "AxisValueRecords" not in self.stat_:
+            self.stat_["AxisValueRecords"] = []
+        # Check for duplicate AxisValueRecords
+        for record in self.stat_["AxisValueRecords"]:
+            names_, locations_, flags_ = record
+            if sorted(names_) == sorted(names) and sorted(locations_) == \
+                    sorted(locations) and sorted(flags_) == sorted(flags):
+                raise FeatureLibError(
+                    'Duplicate AxisValueRecords are not allowed.',
+                    location,
+                )
+        self.stat_["AxisValueRecords"].append((names, locations, flags))
+
+    def build_STAT(self):
+        if not self.stat_:
+            return
+        self.font["STAT"] = newTable("STAT")
+        table = self.font["STAT"].table = otTables.STAT()
+        table.Version = 0x00010001
+        name_table = self.font.get("name")
+        if "ElidedFallbackNameID" in self.stat_:
+            table.ElidedFallbackNameID = self.stat_.get("ElidedFallbackNameID")
+        if "ElidedFallbackName" in self.stat_:
+            name_recs = self.stat_.get("ElidedFallbackName")
+            names = {}
+            for name_rec in name_recs:
+                platformID, platEncID, langID, string = name_rec
+                lang_tag = _WINDOWS_LANGUAGES.get(langID)
+                names[lang_tag] = string
+
+            nameID = name_table.addMultilingualName(names, minNameID=256)
+            table.ElidedFallbackNameID = nameID
+        stat_flags = {
+            "OlderSiblingFontAttribute": 0x1,
+            "ElidableAxisValueName": 0x2,
+            "OlderSiblingFontAttribute ElidableAxisValueName": 0x3,
+            "ElidableAxisValueName OlderSiblingFontAttribute": 0x3,
+        }
+
+        axisRecords = []
+        avrs = {}
+        design_axes = {}
+        for axisTag in self.stat_.get("DesignAxes"):
+            axisOrder, axisNames = self.stat_.get("DesignAxes").get(axisTag)
+            axis = otTables.AxisRecord()
+            axis.AxisTag = axisTag
+            names = {}
+            for name_rec in axisNames:
+                platformID, platEncID, langID, string = name_rec
+                lang_tag = _WINDOWS_LANGUAGES.get(langID)
+                names[lang_tag] = string
+
+            nameID = name_table.addMultilingualName(names, minNameID=256)
+            axis.AxisNameID = nameID
+            axis.AxisOrdering = axisOrder
+            axisRecords.append(axis)
+            design_axes[axisTag] = axisOrder
+
+        if 'AxisValueRecords' in self.stat_:
+            for av_index, record in enumerate(self.stat_.get("AxisValueRecords")):
+                name_recs, locations, flags = record
+                if len(locations) > 1:
+                    # Multiple locations = Format 4
+                    flags = stat_flags.get(" ".join(flags))
+                    if not flags:
+                        flags = 0
+
+                    table.Version = 0x00010002
+                    axisValRec = otTables.AxisValue()
+                    axisValRec.Format = 4
+
+                    names = {}
+                    for name_rec in name_recs:
+                        platformID, platEncID, langID, string = name_rec
+                        lang_tag = _WINDOWS_LANGUAGES.get(langID)
+                        names[lang_tag] = string
+                    for n in names:
+                        print(names.get(n))
+                    nameID = name_table.addMultilingualName(names, minNameID=256)
+                    axisValRec.ValueNameID = nameID
+                    axisValRec.Flags = flags
+                    axisValueRecords = []
+                    for loc in locations:
+                        tag, coords = loc
+                        tag_index = design_axes.get(tag)
+                        avr = otTables.AxisValueRecord()
+                        avr.AxisIndex = tag_index
+                        avr.Value = coords[0]
+                        axisValueRecords.append(avr)
+                    axisValRec.AxisCount = len(axisValueRecords)
+                    axisValRec.AxisValueRecord = axisValueRecords
+                    avrs[av_index] = axisValRec
+
+            for axisTag in self.stat_.get("DesignAxes"):
+                axisOrder, _ = self.stat_.get("DesignAxes").get(axisTag)
+
+                for av_index, record in enumerate(self.stat_.get("AxisValueRecords")):
+                    name_recs, locations, flags = record
+                    if len(locations) == 1:
+                        tag, coords = locations[0]
+                        if tag != axisTag:
+                            continue
+                        flags = stat_flags.get(" ".join(flags))
+                        if not flags:
+                            flags = 0
+
+                        axisValRec = otTables.AxisValue()
+                        axisValRec.AxisIndex = axisOrder
+                        axisValRec.Flags = flags
+
+                        names = {}
+                        for name_rec in name_recs:
+                            platformID, platEncID, langID, string = name_rec
+                            lang_tag = _WINDOWS_LANGUAGES.get(langID)
+                            names[lang_tag] = string
+
+                        nameID = name_table.addMultilingualName(names, minNameID=256)
+                        axisValRec.ValueNameID = nameID
+
+                        if len(coords) == 1:
+                            axisValRec.Format = 1
+                            axisValRec.Value = coords[0]
+                        if len(coords) == 2:
+                            axisValRec.Format = 3
+                            axisValRec.Value = coords[0]
+                            axisValRec.LinkedValue = coords[1]
+                        if len(coords) == 3:
+                            axisValRec.Format = 2
+                            nominal, min_val, max_val = coords
+                            axisValRec.NominalValue = nominal
+                            axisValRec.RangeMinValue = min_val
+                            axisValRec.RangeMaxValue = max_val
+                        avrs[av_index] = axisValRec
+
+        if axisRecords:
+            # Store AxisRecords
+            axisRecordArray = otTables.AxisRecordArray()
+            axisRecordArray.Axis = axisRecords
+            # XXX these should not be hard-coded but computed automatically
+            table.DesignAxisRecordSize = 8
+            table.DesignAxisRecord = axisRecordArray
+            table.DesignAxisCount = len(axisRecords)
+
+        axisValues = [avr for (order, avr) in sorted(avrs.items())]
+
+        if axisValues:
+            # Store AxisValueRecords
+            axisValueArray = otTables.AxisValueArray()
+            axisValueArray.AxisValue = axisValues
+            table.AxisValueArray = axisValueArray
+            table.AxisValueCount = len(axisValues)
+
 
     def build_codepages_(self, pages):
         pages2bits = {
@@ -1260,6 +1436,11 @@ class Builder(object):
 
     def add_vhea_field(self, key, value):
         self.vhea_[key] = value
+
+    def add_vmtx_field(self, key, glyph, value):
+        if key not in self.vmtx_:
+            self.vmtx_[key] = {}
+        self.vmtx_[key][glyph] = value
 
 
 def makeOpenTypeAnchor(anchor):

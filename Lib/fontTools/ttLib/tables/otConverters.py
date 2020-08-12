@@ -52,6 +52,8 @@ def buildConverters(tableSpec, tableNamespace):
 			converterClass = FeatureParams
 		elif name in ("CIDGlyphMapping", "GlyphCIDMapping"):
 			converterClass = StructWithLength
+		elif name == "Flags":
+			converterClass = STATFlags
 		else:
 			if not tp in converterMapping and '(' not in tp:
 				tableName = tp
@@ -329,6 +331,21 @@ class NameID(UShort):
 				else:
 					xmlWriter.comment("missing from name table")
 					log.warning("name id %d missing from name table" % value)
+		xmlWriter.newline()
+
+
+class STATFlags(UShort):
+	def xmlWrite(self, xmlWriter, font, value, name, attrs):
+		xmlWriter.simpletag(name, attrs + [("value", value)])
+		if value:
+			xmlWriter.write("  ")
+			stat_flags = {
+				1: 'OlderSiblingFontAttribute',
+				2: 'ElidableAxisValueName',
+				3: 'OlderSiblingFontAttribute ElidableAxisValueName',
+			}
+			if stat_flags.get(value) is not None:
+				xmlWriter.comment(stat_flags.get(value))
 		xmlWriter.newline()
 
 
@@ -1721,7 +1738,6 @@ converterMapping = {
 	# type		class
 	"int8":		Int8,
 	"int16":	Short,
-	"uint8":	UInt8,
 	"uint8":	UInt8,
 	"uint16":	UShort,
 	"uint24":	UInt24,
