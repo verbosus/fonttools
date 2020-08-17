@@ -499,7 +499,7 @@ class Builder(object):
         if version >= 5:
             checkattr(table, ("usLowerOpticalPointSize", "usUpperOpticalPointSize"))
 
-    def setElidedFallbackName(self, names, location):
+    def setElidedFallbackName(self, value, location):
         # ElidedFallbackName is a convenience method for setting
         # ElidedFallbackNameID so only one can be allowed
         for token in ("ElidedFallbackName", "ElidedFallbackNameID"):
@@ -508,16 +508,10 @@ class Builder(object):
                     f"{token} is already set.",
                     location,
                 )
-        self.stat_["ElidedFallbackName"] = names
-
-    def setElidedFallbackNameID(self, value, location):
-        for token in ("ElidedFallbackName", "ElidedFallbackNameID"):
-            if token in self.stat_:
-                raise FeatureLibError(
-                    f"{token} is already set.",
-                    location,
-                )
-        self.stat_["ElidedFallbackNameID"] = value
+        if isinstance(value, int):
+            self.stat_["ElidedFallbackNameID"] = value
+        if isinstance(value, list):
+            self.stat_["ElidedFallbackName"] = value
 
     def addDesignAxis(self, designAxis, location):
         if "DesignAxes" not in self.stat_:

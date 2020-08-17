@@ -1943,7 +1943,7 @@ class ElidedFallbackNameID(Statement):
         self.location = location
 
     def build(self, builder):
-        builder.setElidedFallbackNameID(self.value, self.location)
+        builder.setElidedFallbackName(self.value, self.location)
 
     def asFea(self, indent=""):
         return f"ElidedFallbackNameID {self.value};"
