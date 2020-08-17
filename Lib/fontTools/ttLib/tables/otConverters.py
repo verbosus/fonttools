@@ -333,21 +333,18 @@ class NameID(UShort):
 					log.warning("name id %d missing from name table" % value)
 		xmlWriter.newline()
 
-
 class STATFlags(UShort):
 	def xmlWrite(self, xmlWriter, font, value, name, attrs):
 		xmlWriter.simpletag(name, attrs + [("value", value)])
-		if value:
+		flags = []
+		if value & 0x01:
+			flags.append("OlderSiblingFontAttribute")
+		if value & 0x02:
+			flags.append("ElidableAxisValueName")
+		if flags:
 			xmlWriter.write("  ")
-			stat_flags = {
-				1: 'OlderSiblingFontAttribute',
-				2: 'ElidableAxisValueName',
-				3: 'OlderSiblingFontAttribute ElidableAxisValueName',
-			}
-			if stat_flags.get(value) is not None:
-				xmlWriter.comment(stat_flags.get(value))
+			xmlWriter.comment(" ".join(flags))
 		xmlWriter.newline()
-
 
 class FloatValue(SimpleValue):
 	@staticmethod

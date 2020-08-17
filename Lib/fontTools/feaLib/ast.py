@@ -4,6 +4,7 @@ from fontTools.feaLib.location import FeatureLibLocation
 from fontTools.misc.encodingTools import getEncoding
 from collections import OrderedDict
 import itertools
+from typing import NamedTuple
 
 SHIFT = " " * 4
 
@@ -28,6 +29,7 @@ __all__ = [
     "Anchor",
     "AnchorDefinition",
     "AttachStatement",
+    "AxisValueLocation",
     "BaseAxis",
     "CVParametersNameStatement",
     "ChainContextPosStatement",
@@ -66,6 +68,7 @@ __all__ = [
     "Statement",
     "STATAxisValueRecord",
     "STATDesignAxis",
+    "STATNameStatement",
     "SubtableStatement",
     "TableBlock",
     "ValueRecord",
@@ -80,14 +83,6 @@ def deviceToString(device):
     else:
         return "<device %s>" % ", ".join("%d %d" % t for t in device)
 
-
-def statNameToString(name_rec):
-    platformID, platEncID, langID, string = name_rec
-    if platformID == 3 and platEncID == 1 and langID == 0x0409:
-        return f'name "{string}";'
-    string = string.encode('unicode-escape').decode().replace('\\u', '\\').upper()
-    langID = '0x%04x' % langID
-    return f'name {platformID} {platEncID} {langID} "{string}";'
 
 
 fea_keywords = set(
@@ -1696,6 +1691,16 @@ class FeatureNameStatement(NameRecord):
         return '{} {}"{}";'.format(tag, plat, self.string)
 
 
+class STATNameStatement(NameRecord):
+    """Represents a STAT table ``name`` statement."""
+
+    def asFea(self, indent=""):
+        plat = simplify_name_attributes(self.platformID, self.platEncID, self.langID)
+        if plat != "":
+            plat += " "
+        return 'name {}"{}";'.format(plat, self.string)
+
+
 class SizeParameters(Statement):
     """A ``parameters`` statement."""
 
@@ -1877,100 +1882,120 @@ class VheaField(Statement):
 
 
 class STATDesignAxis(Statement):
-    """STAT DesignAxis
+    """A STAT table Design Axis
 
     Args:
-        tag: a 4 letter axis tag
-        order: an int to specify Axis ordering
-        names: a list of name record tuples, eg (3, 1, 1, "Bold")
+        tag (str): a 4 letter axis tag
+        axisOrder (int): an int
+        names (list): a list of :class:`STATNameStatement` objects
     """
-    def __init__(self, tag, order, names, location=None):
+    def __init__(self, tag, axisOrder, names, location=None):
         Statement.__init__(self, location)
         self.tag = tag
-        self.axisOrder = order
+        self.axisOrder = axisOrder
         self.names = names
         self.location = location
 
     def build(self, builder):
-        builder.addDesignAxis(self.location, self.tag, self.axisOrder, self.names)
+        builder.addDesignAxis(self, self.location)
 
     def asFea(self, indent=""):
-        res = f'DesignAxis {self.tag} {self.axisOrder} {{ '
-        for name_rec in self.names:
-            res += statNameToString(name_rec)
-        res += f' }};'
+        res = f"DesignAxis {self.tag} {self.axisOrder} {{ "
+        for nameRecord in self.names:
+            res += nameRecord.asFea()
+            res += "\n"
+        res += "};"
         return res
 
 
 class ElidedFallbackName(Statement):
-    """STAT ElidedFallbackName
+    """STAT table ElidedFallbackName
 
     Args:
-        names: a list of name record tuples. (3, 1, 1, "Bold")
+        names: a list of :class:`STATNameStatement` objects
     """
     def __init__(self, names, location=None):
         Statement.__init__(self, location)
         self.names = names
+        self.location = location
 
     def build(self, builder):
-        builder.set_ElidedFallbackName(self.names)
+        builder.setElidedFallbackName(self.names, self.location)
 
     def asFea(self, indent=""):
-        res = f'ElidedFallbackName {{ '
-        for name_rec in self.names:
-            res += statNameToString(name_rec)
-        res += f' }};'
+        res = "ElidedFallbackName { "
+        for nameRecord in self.names:
+            res += nameRecord.asFea()
+            res += "\n"
+        res += "};"
         return res
 
 
 class ElidedFallbackNameID(Statement):
-    """STAT ElidedFallbackNameID
+    """STAT table ElidedFallbackNameID
 
     Args:
-        value: a nameid value
+        value: an int pointing to an existing name table name ID
     """
     def __init__(self, value, location=None):
         Statement.__init__(self, location)
         self.value = value
-
-    def build(self, builder):
-        builder.set_ElidedFallbackNameID(self.value)
-
-    def asFea(self, indent=""):
-        return f'ElidedFallbackNameID {self.value};'
-
-
-class STATAxisValueRecord(Statement):
-    """A STAT Axis Value Record
-
-    Args:
-        names: a list of name record tuples. (3, 1, 1, "Bold")
-        values: a list of location tuples. ("opsz", [8, 5, 10])
-        flags: a list of 'OlderSiblingFontAttribute' and/or 'ElidableAxisValueName'
-    """
-
-    def __init__(self, names, values, flags, location=None):
-        Statement.__init__(self, location)
-        self.names = names
-        self.values = values
-        self.flags = flags
         self.location = location
 
     def build(self, builder):
-        builder.addAxisValueRecord(self.location, self.names, self.values, self.flags)
+        builder.setElidedFallbackNameID(self.value, self.location)
 
     def asFea(self, indent=""):
-        res = f''
-        for location in self.values:
-            axis_tag, coords = location
-            res += f'location {axis_tag} ' \
-                   f'{" ".join(["%s" % i for i in coords])};\n'
+        return f"ElidedFallbackNameID {self.value};"
 
-        for name_rec in self.names:
-            res += statNameToString(name_rec)
-            res += '\n'
+
+class STATAxisValueRecord(Statement):
+    """A STAT table Axis Value Record
+
+    Args:
+        names (list): a list of :class:`STATNameStatement` objects
+        locations (list): a list of :class:`AxisValueLocation` objects
+        flags (int): an int
+    """
+    def __init__(self, names, locations, flags, location=None):
+        Statement.__init__(self, location)
+        self.names = names
+        self.locations = locations
+        self.flags = flags
+
+    def build(self, builder):
+        builder.addAxisValueRecord(self, self.location)
+
+    def asFea(self, indent=""):
+        res = "AxisValue {\n"
+        for location in self.locations:
+            res += f"location {location.tag} "
+            res += f"{' '.join(str(i) for i in location.values)};\n"
+
+        for nameRecord in self.names:
+            res += nameRecord.asFea()
+            res += "\n"
 
         if self.flags:
-            res += f'flag {" ".join(self.flags)};'
+            flags = ["OlderSiblingFontAttribute", "ElidableAxisValueName"]
+            flagStrings = []
+            curr = 1
+            for i in range(len(flags)):
+                if self.flags & curr != 0:
+                    flagStrings.append(flags[i])
+                curr = curr << 1
+            res += f"flag {' '.join(flagStrings)};\n"
+        res += "};"
         return res
 
+
+class AxisValueLocation(NamedTuple):
+    """
+    A STAT table Axis Value Location
+
+    Args:
+        tag (str): a 4 letter axis tag
+        values (list): a list of ints and/or floats
+    """
+    tag: str
+    values: list

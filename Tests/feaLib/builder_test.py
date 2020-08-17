@@ -9,6 +9,7 @@ from fontTools.feaLib import ast
 from fontTools.feaLib.lexer import Lexer
 import difflib
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -141,13 +142,20 @@ class BuilderTest(unittest.TestCase):
                 font[tag].compile(font)
 
     def check_fea2fea_file(self, name, base=None, parser=Parser):
+        # TODO: Do better matching than this. Whitespace is mostly irrelevant
+        # except if it's inside a string. Name ID numbers can be hex, but are
+        # converted to ints so the diff fails. Name strings are allowed to be
+        # escaped in the source, but they become unescaped and diff fails.
         font = makeTTFont()
         fname = (name + ".fea") if '.' not in name else name
         p = parser(self.getpath(fname), glyphNames=font.getGlyphOrder())
         doc = p.parse()
         actual = self.normal_fea(doc.asFea().split("\n"))
+        actual = " ".join(actual).replace("\n", "").split(";")
+
         with open(self.getpath(base or fname), "r", encoding="utf-8") as ofile:
             expected = self.normal_fea(ofile.readlines())
+            expected = " ".join(expected).replace("\n", "").split(";")
 
         if expected != actual:
             fname = name.rsplit(".", 1)[0] + ".fea"
@@ -453,10 +461,62 @@ class BuilderTest(unittest.TestCase):
             "} test;"
         )
 
+    def test_STAT_elidedfallbackname_already_defined(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            'ElidedFallbackName is already set.',
+            self.build,
+            'table name {'
+            '   nameid 256 "Roman"; '
+            '} name;'
+            'table STAT {'
+            '    ElidedFallbackName { name "Roman"; };'
+            '    ElidedFallbackNameID 256;'
+            '} STAT;')
+
+    def test_STAT_elidedfallbackname_set_twice(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            'ElidedFallbackName is already set.',
+            self.build,
+            'table name {'
+            '   nameid 256 "Roman"; '
+            '} name;'
+            'table STAT {'
+            '    ElidedFallbackName { name "Roman"; };'
+            '    ElidedFallbackName { name "Italic"; };'
+            '} STAT;')
+
+    def test_STAT_elidedfallbacknameID_already_defined(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            'ElidedFallbackNameID is already set.',
+            self.build,
+            'table name {'
+            '   nameid 256 "Roman"; '
+            '} name;'
+            'table STAT {'
+            '    ElidedFallbackNameID 256;'
+            '    ElidedFallbackName { name "Roman"; };'
+            '} STAT;')
+
+    def test_STAT_elidedfallbacknameID_not_in_name_table(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            'ElidedFallbackNameID 256 points to a nameID that does not '
+            'exist in the "name" table',
+            self.build,
+            'table name {'
+            '   nameid 257 "Roman"; '
+            '} name;'
+            'table STAT {'
+            '    ElidedFallbackNameID 256;'
+            '} STAT;')
+
     def test_STAT_design_axis_name(self):
         self.assertRaisesRegex(
             FeatureLibError,
-            'Expected "name", got "badtag"',
+            'Expected "name"',
             self.build,
             'table name {'
             '   nameid 256 "Roman"; '
@@ -480,18 +540,24 @@ class BuilderTest(unittest.TestCase):
             '    DesignAxis opsz 1 { name "Optical Size"; };'
             '} STAT;')
 
-    def test_STAT_design_axis_multilingual_name(self):
-        print(self.build(
-        'table name {'
-        '   nameid 256 "Roman"; '
-        '} name;'
-        'table STAT {'
-        '    ElidedFallbackName { name "Roman"; };'
-        '    DesignAxis opsz 0 { '
-        '    name "Optical Size"; '
-        '    name 3 1 0x0408 "\03B1\03C0\03BB\03CC"; '
-        '};'
-        '} STAT;'))
+    def test_STAT_design_axis_duplicate_order(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            "DesignAxis already defined for axis number 0.",
+            self.build,
+            'table name {'
+            '   nameid 256 "Roman"; '
+            '} name;'
+            'table STAT {'
+            '    ElidedFallbackName { name "Roman"; };'
+            '    DesignAxis opsz 0 { name "Optical Size"; };'
+            '    DesignAxis wdth 0 { name "Width"; };'
+            '    AxisValue {'
+            '         location opsz 8;'
+            '         location wdth 400;'
+            '         name "Caption";'
+            '     };'
+            '} STAT;')
 
     def test_STAT_undefined_tag(self):
         self.assertRaisesRegex(
@@ -537,7 +603,7 @@ class BuilderTest(unittest.TestCase):
         # is different.
         self.assertRaisesRegex(
             FeatureLibError,
-            'Duplicate AxisValueRecords are not allowed.',
+            'An AxisValueRecord with these values is already defined.',
             self.build,
             'table name {'
             '   nameid 256 "Roman"; '
@@ -547,13 +613,13 @@ class BuilderTest(unittest.TestCase):
             '    DesignAxis opsz 0 { name "Optical Size"; };'
             '    DesignAxis wdth 1 { name "Width"; };'
             '    AxisValue {'
-            '         location opsz 8 5 9;'
-            '         location wdth 400 350 450;'
+            '         location opsz 8;'
+            '         location wdth 400;'
             '         name "Caption";'
             '     };'
             '    AxisValue {'
-            '         location wdth 400 350 450;'
-            '         location opsz 8 5 9;'
+            '         location wdth 400;'
+            '         location opsz 8;'
             '         name "Caption";'
             '     };'
             '} STAT;')
@@ -567,7 +633,8 @@ class BuilderTest(unittest.TestCase):
             '   nameid 256 "Roman"; '
             '} name;'
             'table STAT {'
-            '    ElidedFallbackName { name "Roman"; };'
+            '    ElidedFallbackName {   name "Roman"; '
+            '};'
             '    DesignAxis opsz 0 { name "Optical Size"; };'
             '    AxisValue { '
             '        name "Wide"; '
@@ -583,7 +650,8 @@ class BuilderTest(unittest.TestCase):
             '   nameid 256 "Roman"; '
             '} name;'
             'table STAT {'
-            '    ElidedFallbackName { name "Roman"; };'
+            '    ElidedFallbackName { name "Roman"; '
+            '                         name 3 1 0x0411 "ローマン"; }; '
             '    DesignAxis width 0 { name "Width"; };'
             '} STAT;')
 

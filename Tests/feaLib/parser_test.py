@@ -1257,35 +1257,35 @@ class ParserTest(unittest.TestCase):
             self.parse, "feature test {script dflt;} test;")
 
     def test_stat_design_axis(self):  # STAT DesignAxis
-        doc = self.parse('table STAT { DesignAxis opsz 0 {name '
-                         '"Optical Size";}; } STAT;')
+        doc = self.parse('table STAT { DesignAxis opsz 0 '
+                         '{name "Optical Size";}; } STAT;')
         da = doc.statements[0].statements[0]
         self.assertIsInstance(da, ast.STATDesignAxis)
         self.assertEqual(da.tag, 'opsz')
         self.assertEqual(da.axisOrder, 0)
-        self.assertEqual(da.names[0][3], 'Optical Size')
+        self.assertEqual(da.names[0].string, 'Optical Size')
 
     def test_stat_axis_value_format1(self):  # STAT AxisValue
         doc = self.parse('table STAT { DesignAxis opsz 0 '
                          '{name "Optical Size";}; '
                          'AxisValue {location opsz 8; name "Caption";}; } '
                          'STAT;')
-        avr = doc.statements[0].statements[1].statements[0]
+        avr = doc.statements[0].statements[1]
         self.assertIsInstance(avr, ast.STATAxisValueRecord)
-        self.assertEqual(avr.values[0][0], 'opsz')
-        self.assertEqual(avr.values[0][1][0], 8)
-        self.assertEqual(avr.names[0][3], 'Caption')
+        self.assertEqual(avr.locations[0].tag, 'opsz')
+        self.assertEqual(avr.locations[0].values[0], 8)
+        self.assertEqual(avr.names[0].string, 'Caption')
 
     def test_stat_axis_value_format2(self):  # STAT AxisValue
         doc = self.parse('table STAT { DesignAxis opsz 0 '
                          '{name "Optical Size";}; '
                          'AxisValue {location opsz 8 6 10; name "Caption";}; } '
                          'STAT;')
-        avr = doc.statements[0].statements[1].statements[0]
+        avr = doc.statements[0].statements[1]
         self.assertIsInstance(avr, ast.STATAxisValueRecord)
-        self.assertEqual(avr.values[0][0], 'opsz')
-        self.assertEqual(avr.values[0][1], [8, 6, 10])
-        self.assertEqual(avr.names[0][3], 'Caption')
+        self.assertEqual(avr.locations[0].tag, 'opsz')
+        self.assertEqual(avr.locations[0].values, [8, 6, 10])
+        self.assertEqual(avr.names[0].string, 'Caption')
 
     def test_stat_axis_value_format2_bad_range(self):  # STAT AxisValue
         self.assertRaisesRegex(
@@ -1295,6 +1295,36 @@ class ParserTest(unittest.TestCase):
                         '{name "Optical Size";}; '
                         'AxisValue {location opsz 5 6 10; name "Caption";}; } '
                         'STAT;')
+
+    def test_stat_axis_value_format4(self):  # STAT AxisValue
+        self.assertRaisesRegex(
+            FeatureLibError,
+            'Only one value is allowed in a Format 4 Axis Value Record, but 3 were found.',
+            self.parse, 'table STAT { '
+                         'DesignAxis opsz 0 {name "Optical Size";}; '
+                         'DesignAxis wdth 0 {name "Width";}; '
+                         'AxisValue {'
+                         'location opsz 8 6 10; '
+                         'location wdth 400; '
+                         'name "Caption";}; } '
+                         'STAT;')
+
+    def test_stat_elidedfallbackname(self):  # STAT ElidedFallbackName
+        doc = self.parse('table STAT { ElidedFallbackName {name "Roman"; '
+                         'name 3 1 0x0411 "ローマン"; }; '
+                         '} STAT;')
+        nameRecord = doc.statements[0].statements[0]
+        self.assertIsInstance(nameRecord, ast.ElidedFallbackName)
+        self.assertEqual(nameRecord.names[0].string, 'Roman')
+        self.assertEqual(nameRecord.names[1].string, 'ローマン')
+
+    def test_stat_elidedfallbacknameid(self):  # STAT ElidedFallbackNameID
+        doc = self.parse('table name { nameid 278 "Roman"; } name; '
+                         'table STAT { ElidedFallbackNameID 278; '
+                         '} STAT;')
+        nameRecord = doc.statements[0].statements[0]
+        self.assertIsInstance(nameRecord, ast.NameRecord)
+        self.assertEqual(nameRecord.string, 'Roman')
 
     def test_sub_single_format_a(self):  # GSUB LookupType 1
         doc = self.parse("feature smcp {substitute a by a.sc;} smcp;")

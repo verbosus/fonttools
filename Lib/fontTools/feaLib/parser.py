@@ -1163,6 +1163,37 @@ class Parser(object):
         unescaped = self.unescape_string_(string, encoding)
         return platformID, platEncID, langID, unescaped
 
+    def parse_stat_name_(self):
+        platEncID = None
+        langID = None
+        if self.next_token_type_ in Lexer.NUMBERS:
+            platformID = self.expect_any_number_()
+            location = self.cur_token_location_
+            if platformID not in (1, 3):
+                raise FeatureLibError("Expected platform id 1 or 3", location)
+            if self.next_token_type_ in Lexer.NUMBERS:
+                platEncID = self.expect_any_number_()
+                langID = self.expect_any_number_()
+        else:
+            platformID = 3
+            location = self.cur_token_location_
+
+        if platformID == 1:  # Macintosh
+            platEncID = platEncID or 0  # Roman
+            langID = langID or 0  # English
+        else:  # 3, Windows
+            platEncID = platEncID or 1  # Unicode
+            langID = langID or 0x0409  # English
+
+        string = self.expect_string_()
+        # self.expect_symbol_(";")
+
+        encoding = getEncoding(platformID, platEncID, langID)
+        if encoding is None:
+            raise FeatureLibError("Unsupported encoding", location)
+        unescaped = self.unescape_string_(string, encoding)
+        return platformID, platEncID, langID, unescaped
+
     def parse_nameid_(self):
         assert self.cur_token_ == "nameid", self.cur_token_
         location, nameID = self.cur_token_location_, self.expect_any_number_()
@@ -1284,69 +1315,130 @@ class Parser(object):
             elif self.cur_token_ == ";":
                 continue
 
+    def parse_STAT_ElidedFallbackName(self):
+        assert self.is_cur_keyword_("ElidedFallbackName")
+        self.expect_symbol_("{")
+        names = []
+        while self.next_token_ != "}" or self.cur_comments_:
+            self.advance_lexer_()
+            if self.is_cur_keyword_("name"):
+                platformID, platEncID, langID, string = self.parse_stat_name_()
+                nameRecord = self.ast.STATNameStatement(
+                    "stat", platformID, platEncID, langID, string,
+                    location=self.cur_token_location_
+                )
+                names.append(nameRecord)
+            else:
+                if self.cur_token_ != ";":
+                    raise FeatureLibError(f"Unexpected token {self.cur_token_} "
+                                          f"in ElidedFallbackName",
+                                          self.cur_token_location_)
+        self.expect_symbol_("}")
+        if not names:
+            raise FeatureLibError('Expected "name"',
+                                  self.cur_token_location_)
+        return names
+
     def parse_STAT_design_axis(self):
-        axis_tag = self.expect_tag_()
-        if axis_tag not in ('ital', 'opsz', 'slnt', 'wdth', 'wght') and not \
-                axis_tag.isupper():
+        assert self.is_cur_keyword_('DesignAxis')
+        names = []
+        axisTag = self.expect_tag_()
+        if (axisTag not in ('ital', 'opsz', 'slnt', 'wdth', 'wght')
+                and not axisTag.isupper()):
             log.warning(
-                f'Unregistered axis tag {axis_tag} should be uppercase.'
+                f'Unregistered axis tag {axisTag} should be uppercase.'
             )
-        axis_order = self.expect_number_()
-        axis_names = self.expect_stat_name_()
-        return axis_tag, axis_order, axis_names
+        axisOrder = self.expect_number_()
+        self.expect_symbol_('{')
+        while self.next_token_ != "}" or self.cur_comments_:
+            self.advance_lexer_()
+            if self.cur_token_type_ is Lexer.COMMENT:
+                continue
+            elif self.is_cur_keyword_("name"):
+                location = self.cur_token_location_
+                platformID, platEncID, langID, string = self.parse_stat_name_()
+                name = self.ast.STATNameStatement(
+                    "stat", platformID, platEncID, langID, string, location=location
+                )
+                names.append(name)
+            elif self.cur_token_ == ";":
+                continue
+            else:
+                raise FeatureLibError(f'Expected "name", got {self.cur_token_}',
+                                      self.cur_token_location_)
+
+        self.expect_symbol_("}")
+        return self.ast.STATDesignAxis(axisTag, axisOrder, names, self.cur_token_location_)
 
     def parse_STAT_axis_value_(self):
-        assert self.is_cur_keyword_('AxisValue')
-        block = self.ast.NestedBlock(
-            'AxisValue', self.cur_token_, location=self.cur_token_location_
-        )
+        assert self.is_cur_keyword_("AxisValue")
         self.expect_symbol_("{")
         locations = []
-        axis_names = []
-        flags = []
+        names = []
+        flags = 0
         while self.next_token_ != "}" or self.cur_comments_:
             self.advance_lexer_(comments=True)
             if self.cur_token_type_ is Lexer.COMMENT:
-                block.statements.append(
-                    self.ast.Comment(self.cur_token_,
-                                     location=self.cur_token_location_)
+                continue
+            elif self.is_cur_keyword_("name"):
+                location = self.cur_token_location_
+                platformID, platEncID, langID, string = self.parse_stat_name_()
+                name = self.ast.STATNameStatement(
+                    "stat", platformID, platEncID, langID, string, location=location
                 )
-            elif self.is_cur_keyword_('location'):
-                loc = self.parse_STAT_location()
-                locations.append(loc)
-            elif self.is_cur_keyword_('name'):
-                platformID, platEncID, langID, string = self.parse_name_()
-                axis_names.append((platformID, platEncID, langID, string))
-            elif self.is_cur_keyword_('flag'):
+                names.append(name)
+            elif self.is_cur_keyword_("location"):
+                location = self.parse_STAT_location()
+                locations.append(location)
+            elif self.is_cur_keyword_("flag"):
                 flags = self.expect_stat_flags()
+            elif self.cur_token_ == ";":
+                continue
             else:
-                if self.cur_token_ != ';':
-                    raise FeatureLibError(f'Unexpected token {self.cur_token_} '
-                                          f'in Axis Value',
-                                          self.cur_token_location_)
-        self.expect_symbol_('}')
-        if not axis_names:
+                raise FeatureLibError(f"Unexpected token {self.cur_token_} "
+                                      f"in AxisValue", self.cur_token_location_)
+        self.expect_symbol_("}")
+        if not names:
             raise FeatureLibError('Expected "Axis Name"',
                                   self.cur_token_location_)
         if not locations:
             raise FeatureLibError('Expected "Axis location"',
                                   self.cur_token_location_)
-        return axis_names, locations, flags, block
+        if len(locations) > 1:
+            for location in locations:
+                if len(location.values) > 1:
+                    raise FeatureLibError("Only one value is allowed in a "
+                                          "Format 4 Axis Value Record, but "
+                                          f"{len(location.values)} were found.",
+                                          self.cur_token_location_)
+            format4_tags = []
+            for location in locations:
+                tag = location.tag
+                if tag in format4_tags:
+                    raise FeatureLibError(f"Axis tag {tag} already "
+                                          "defined.",
+                                          self.cur_token_location_)
+                format4_tags.append(tag)
+
+        return self.ast.STATAxisValueRecord(names, locations, flags, self.cur_token_location_)
 
     def parse_STAT_location(self):
         values = []
-        loc_tag = self.expect_tag_()
-        if len(loc_tag.strip()) != 4:
-            raise FeatureLibError(f'Axis tag {self.cur_token_} must be 4 '
-                                  f'characters', self.cur_token_location_)
+        tag = self.expect_tag_()
+        if len(tag.strip()) != 4:
+            raise FeatureLibError(f"Axis tag {self.cur_token_} must be 4 "
+                                  "characters", self.cur_token_location_)
 
-        while self.next_token_ != ';':
-            if self.next_token_type_ in [Lexer.NUMBER, Lexer.FLOAT]:
-                value = self.expect_stat_values_()
+        while self.next_token_ != ";":
+            if self.next_token_type_ is Lexer.FLOAT:
+                value = self.expect_float_()
+                values.append(value)
+            elif self.next_token_type_ is Lexer.NUMBER:
+                value = self.expect_number_()
                 values.append(value)
             else:
                 raise FeatureLibError(f'Unexpected value "{self.next_token_}". '
-                                      f'Expected integer or float.',
+                                      'Expected integer or float.',
                                       self.next_token_location_)
         if len(values) == 3:
             nominal, min_val, max_val = values
@@ -1355,78 +1447,46 @@ class Parser(object):
                                       f'of specified range '
                                       f'{min_val}-{max_val}.',
                                       self.next_token_location_)
-        return loc_tag, values
+        return self.ast.AxisValueLocation(tag, values)
 
     def parse_table_STAT_(self, table):
         statements = table.statements
         design_axes = []
-        while self.next_token_ != '}' or self.cur_comments_:
+        while self.next_token_ != "}" or self.cur_comments_:
             self.advance_lexer_(comments=True)
             if self.cur_token_type_ is Lexer.COMMENT:
                 statements.append(
                     self.ast.Comment(self.cur_token_, location=self.cur_token_location_)
                 )
             elif self.cur_token_type_ is Lexer.NAME:
-                if self.is_cur_keyword_('ElidedFallbackName'):
-                    value = self.expect_stat_name_()
-                    statements.append(self.ast.ElidedFallbackName(value))
-                    self.expect_symbol_(';')
-                elif self.is_cur_keyword_('ElidedFallbackNameID'):
+                if self.is_cur_keyword_("ElidedFallbackName"):
+                    names = self.parse_STAT_ElidedFallbackName()
+                    statements.append(self.ast.ElidedFallbackName(names))
+                elif self.is_cur_keyword_("ElidedFallbackNameID"):
                     value = self.expect_number_()
                     statements.append(self.ast.ElidedFallbackNameID(value))
-                    self.expect_symbol_(';')
-                elif self.is_cur_keyword_('DesignAxis'):
-                    axis_tag, order, value = self.parse_STAT_design_axis()
-                    design_axes.append(axis_tag)
-                    statements.append(
-                        self.ast.STATDesignAxis(
-                            axis_tag, order, value, location=self.cur_token_location_
-                        )
-                    )
-                    self.expect_symbol_(';')
-                elif self.is_cur_keyword_('AxisValue'):
-                    names, locs, flags, block = self.parse_STAT_axis_value_()
-                    fmt4_tags = []
-                    for loc in locs:
-                        tag = loc[0]
-                        if tag in fmt4_tags:
-                            raise FeatureLibError(f'Axis tag {tag} already '
-                                                  f'defined.',
-                                                  self.cur_token_location_)
-                        fmt4_tags.append(tag)
-                        if tag not in design_axes:
+                    self.expect_symbol_(";")
+                elif self.is_cur_keyword_("DesignAxis"):
+                    designAxis = self.parse_STAT_design_axis()
+                    design_axes.append(designAxis.tag)
+                    statements.append(designAxis)
+                    self.expect_symbol_(";")
+                elif self.is_cur_keyword_("AxisValue"):
+                    axisValueRecord = self.parse_STAT_axis_value_()
+                    for location in axisValueRecord.locations:
+                        if location.tag not in design_axes:
                             # Tag must be defined in a DesignAxis before it
                             # can be referenced
-                            raise FeatureLibError(f'DesignAxis not defined for '
-                                                  f'{tag}.',
+                            raise FeatureLibError("DesignAxis not defined for "
+                                                  f"{location.tag}.",
                                                   self.cur_token_location_)
-                    block.statements.append(
-                        self.ast.STATAxisValueRecord(
-                            names, locs, flags, location=self.cur_token_location_
-                        )
-                    )
-                    statements.append(block)
-                    self.expect_symbol_(';')
+                    statements.append(axisValueRecord)
+                    self.expect_symbol_(";")
                 else:
-                    raise FeatureLibError(f'Unexpected token {self.cur_token_}',
+                    raise FeatureLibError(f"Unexpected token {self.cur_token_}",
                                           self.cur_token_location_)
-            elif self.cur_token_ == ';':
+            elif self.cur_token_ == ";":
                 continue
-
-    def expect_stat_name_(self):
-        self.expect_symbol_('{')
-        axis_names = []
-        while self.next_token_ != '}' or self.cur_comments_:
-            self.advance_lexer_()
-            if self.is_cur_keyword_('name'):
-                platformID, platEncID, langID, string = self.parse_name_()
-                axis_names.append((platformID, platEncID, langID, string))
-            else:
-                raise FeatureLibError(f'Expected "name", got '
-                                      f'"{self.cur_token_}"',
-                                      self.cur_token_location_)
-        self.expect_symbol_('}')
-        return axis_names
 
     def parse_base_tag_list_(self):
         # Parses BASE table entries. (See `section 9.a <https://adobe-type-tools.github.io/afdko/OpenTypeFeatureFileSpecification.html#9.a>`_)
@@ -2003,17 +2063,21 @@ class Parser(object):
             )
 
     def expect_stat_flags(self):
-        flags = []
+        value = 0
+        flags = {
+            "OlderSiblingFontAttribute": 1,
+            "ElidableAxisValueName": 2,
+        }
         while self.next_token_ != ";":
-            flag = self.expect_name_()
-            if flag not in ('ElidableAxisValueName',
-                            'OlderSiblingFontAttribute'):
+            if self.next_token_ in flags:
+                name = self.expect_name_()
+                value = value | flags[name]
+            else:
                 raise FeatureLibError(
-                    f'Unexpected STAT flag {self.cur_token_}',
+                    f"Unexpected STAT flag {self.cur_token_}",
                     self.cur_token_location_
-            )
-            flags.append(flag)
-        return flags
+                )
+        return value
 
     def expect_stat_values_(self):
         if self.next_token_type_ == Lexer.FLOAT:
