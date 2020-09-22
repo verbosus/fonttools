@@ -9,10 +9,14 @@ table STAT {
                          name 3 1 1041 "ローマン";
                          };
 
-    DesignAxis opsz 0 { name "Optical Size"; };
-    DesignAxis wdth 1 { name "Width"; };
-    DesignAxis wght 2 { name "Weight"; };
-    DesignAxis ital 3 { name "Italic"; };  # here comment
+    DesignAxis opsz 0 { name "Optical Size";
+    };
+    DesignAxis wdth 1 { name "Width";
+    };
+    DesignAxis wght 2 { name "Weight";
+    };
+    DesignAxis ital 3 { name "Italic";
+    };  # here comment
 
     AxisValue {
         location opsz 8;  # comment here

@@ -510,8 +510,10 @@ class Builder(object):
                 )
         if isinstance(value, int):
             self.stat_["ElidedFallbackNameID"] = value
-        if isinstance(value, list):
+        elif isinstance(value, list):
             self.stat_["ElidedFallbackName"] = value
+        else:
+            raise AssertionError(value)
 
     def addDesignAxis(self, designAxis, location):
         if "DesignAxes" not in self.stat_:
@@ -549,7 +551,10 @@ class Builder(object):
         self.font["STAT"] = newTable("STAT")
         table = self.font["STAT"].table = otTables.STAT()
         table.Version = 0x00010001
-        nameTable = self.font["name"]
+        nameTable = self.font.get("name")
+        if not nameTable:  # this only happens for unit tests
+            nameTable = self.font["name"] = newTable("name")
+            nameTable.names = []
         if "ElidedFallbackNameID" in self.stat_:
             nameID = self.stat_["ElidedFallbackNameID"]
             name = nameTable.getDebugName(nameID)

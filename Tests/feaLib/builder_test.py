@@ -142,20 +142,13 @@ class BuilderTest(unittest.TestCase):
                 font[tag].compile(font)
 
     def check_fea2fea_file(self, name, base=None, parser=Parser):
-        # TODO: Do better matching than this. Whitespace is mostly irrelevant
-        # except if it's inside a string. Name ID numbers can be hex, but are
-        # converted to ints so the diff fails. Name strings are allowed to be
-        # escaped in the source, but they become unescaped and diff fails.
         font = makeTTFont()
         fname = (name + ".fea") if '.' not in name else name
         p = parser(self.getpath(fname), glyphNames=font.getGlyphOrder())
         doc = p.parse()
         actual = self.normal_fea(doc.asFea().split("\n"))
-        actual = " ".join(actual).replace("\n", "").split(";")
-
         with open(self.getpath(base or fname), "r", encoding="utf-8") as ofile:
             expected = self.normal_fea(ofile.readlines())
-            expected = " ".join(expected).replace("\n", "").split(";")
 
         if expected != actual:
             fname = name.rsplit(".", 1)[0] + ".fea"
