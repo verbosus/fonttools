@@ -5,17 +5,25 @@ table name {
 
 table STAT {
 
-    ElidedFallbackName { name "Roman";
-                         name 3 1 1041 "ローマン";
-                         };
+    ElidedFallbackName {
+        name "Roman";
+        name 3 1 1041 "ローマン";
+    };
 
-    DesignAxis opsz 0 { name "Optical Size";
+    DesignAxis opsz 0 {
+        name "Optical Size";
     };
-    DesignAxis wdth 1 { name "Width";
+
+    DesignAxis wdth 1 {
+        name "Width";
     };
-    DesignAxis wght 2 { name "Weight";
+
+    DesignAxis wght 2 {
+        name "Weight";
     };
-    DesignAxis ital 3 { name "Italic";
+
+    DesignAxis ital 3 {
+        name "Italic";
     };  # here comment
 
     AxisValue {
