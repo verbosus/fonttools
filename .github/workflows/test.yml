@@ -20,7 +20,7 @@ jobs:
     - name: Run Tox
       run: tox -e mypy,package_readme
 
-  build:
+  test:
     runs-on: ${{ matrix.platform }}
     strategy:
       matrix:
@@ -50,7 +50,7 @@ jobs:
         name: codecov-umbrella
         fail_ci_if_error: true
 
-  build-cython:
+  test-cython:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -63,7 +63,7 @@ jobs:
     - name: Run Tox
       run: tox -e py-cy-nolxml
 
-  build-pypy3:
+  test-pypy3:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
