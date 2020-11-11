@@ -61,4 +61,4 @@ jobs:
     - name: Install packages
       run: pip install tox
     - name: Run Tox
-      run: tox -e py-cy
+      run: tox -e py-cy-nolxml
