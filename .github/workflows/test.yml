@@ -37,7 +37,7 @@ jobs:
     - name: Run Tox
       run: tox -e py-cov
     - name: Run Tox without lxml
-      run: tox -e py-nolxml
+      run: tox -e py-cov-nolxml
     - name: Produce coverage files
       run: |
         coverage combine
